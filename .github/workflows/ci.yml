@@ -1,0 +1,144 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TEST_IMAGE: taskflow-api:test
+  RUNTIME_IMAGE: taskflow-api:runtime
+
+jobs:
+  test:
+    name: Migrations, quality and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql+psycopg://taskflow_test:taskflow_test@taskflow-postgres:5432/taskflow_test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build test image
+        run: docker build --target test --tag "$TEST_IMAGE" --file docker/Dockerfile .
+
+      - name: Start temporary PostgreSQL
+        run: |
+          set -euo pipefail
+          docker network create taskflow-ci
+          docker run --detach \
+            --name taskflow-postgres \
+            --network taskflow-ci \
+            --env POSTGRES_DB=taskflow_test \
+            --env POSTGRES_USER=taskflow_test \
+            --env POSTGRES_PASSWORD=taskflow_test \
+            --health-cmd="pg_isready -U taskflow_test -d taskflow_test" \
+            --health-interval=2s \
+            --health-timeout=3s \
+            --health-retries=15 \
+            postgres:16-alpine
+
+      - name: Wait for PostgreSQL
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            health_status="$(docker inspect --format='{{.State.Health.Status}}' taskflow-postgres)"
+            if [ "$health_status" = "healthy" ]; then
+              exit 0
+            fi
+            if [ "$health_status" = "unhealthy" ]; then
+              break
+            fi
+            sleep 2
+          done
+          docker logs taskflow-postgres
+          exit 1
+
+      - name: Run database migrations
+        run: |
+          docker run --rm \
+            --network taskflow-ci \
+            --env APP_ENV=test \
+            --env DATABASE_URL="$DATABASE_URL" \
+            "$TEST_IMAGE" \
+            alembic upgrade head
+
+      - name: Run Ruff
+        run: docker run --rm "$TEST_IMAGE" ruff check .
+
+      - name: Check formatting
+        run: docker run --rm "$TEST_IMAGE" ruff format --check .
+
+      - name: Run tests with minimum coverage
+        run: |
+          docker run --rm \
+            --network taskflow-ci \
+            --env APP_ENV=test \
+            --env DATABASE_URL="$DATABASE_URL" \
+            "$TEST_IMAGE" \
+            pytest -q --cov-fail-under=80
+
+      - name: Show PostgreSQL logs on failure
+        if: failure()
+        run: docker logs taskflow-postgres || true
+
+      - name: Clean up test services
+        if: always()
+        run: |
+          docker rm --force taskflow-postgres || true
+          docker network rm taskflow-ci || true
+
+  runtime-image:
+    name: Runtime image smoke test
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build runtime image
+        run: docker build --target runtime --tag "$RUNTIME_IMAGE" --file docker/Dockerfile .
+
+      - name: Start runtime image
+        run: |
+          docker run --detach \
+            --name taskflow-runtime \
+            --publish 8000:8000 \
+            "$RUNTIME_IMAGE"
+
+      - name: Verify application startup
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8000/health/live; then
+              exit 0
+            fi
+            if [ "$(docker inspect --format='{{.State.Running}}' taskflow-runtime)" != "true" ]; then
+              break
+            fi
+            sleep 2
+          done
+          docker logs taskflow-runtime
+          exit 1
+
+      - name: Show application logs on failure
+        if: failure()
+        run: docker logs taskflow-runtime || true
+
+      - name: Clean up runtime container
+        if: always()
+        run: docker rm --force taskflow-runtime || true
