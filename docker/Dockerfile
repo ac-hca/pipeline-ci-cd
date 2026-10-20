@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN groupadd --system app && useradd --system --gid app --create-home app
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 
 
 FROM base AS development
@@ -25,11 +26,12 @@ COPY alembic ./alembic
 COPY tests ./tests
 
 RUN chown -R app:app /app
-USER app
+USER 10001:10001
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 
+# Su objetivo es construir paquetes instalables de Python llamados wheels
 FROM base AS builder
 
 COPY requirements.txt ./
@@ -48,7 +50,7 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 COPY alembic.ini ./
 COPY alembic ./alembic
 
-USER app
+USER 10001:10001
 
 EXPOSE 8000
 

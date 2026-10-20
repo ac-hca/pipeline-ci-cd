@@ -18,6 +18,11 @@ concurrency:
 env:
   TEST_IMAGE: taskflow-api:test
   RUNTIME_IMAGE: taskflow-api:runtime
+  GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
+  HADOLINT_IMAGE: hadolint/hadolint:v2.15.1-debian
+  CHECKOV_IMAGE: bridgecrew/checkov:3.3.29
+  TRIVY_IMAGE: aquasec/trivy:0.76.0
+  SECURITY_PYTHON_IMAGE: python:3.12-slim
 
 jobs:
   test:
@@ -100,9 +105,106 @@ jobs:
           docker rm --force taskflow-postgres || true
           docker network rm taskflow-ci || true
 
+  sast-and-dependencies:
+    name: SAST and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run Bandit SAST and audit Python dependencies
+        run: |
+          docker run --rm \
+            --volume "$PWD:/workspace:ro" \
+            --workdir /workspace \
+            "$SECURITY_PYTHON_IMAGE" \
+            sh -c 'pip install --disable-pip-version-check --requirement requirements-security.txt \
+              && bandit --recursive app --severity-level medium --confidence-level medium \
+              && pip-audit --requirement requirements.txt --strict'
+
+  secrets:
+    name: Secret detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out complete repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan Git history with Gitleaks
+        run: |
+          docker run --rm \
+            --volume "$PWD:/repository:ro" \
+            "$GITLEAKS_IMAGE" \
+            git --redact --verbose /repository
+
+  infrastructure-security:
+    name: Dockerfile and infrastructure review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile with Hadolint
+        run: |
+          docker run --rm \
+            --volume "$PWD:/workspace:ro" \
+            "$HADOLINT_IMAGE" \
+            hadolint /workspace/docker/Dockerfile
+
+      - name: Scan infrastructure as code with Checkov
+        run: |
+          docker run --rm \
+            --volume "$PWD:/workspace:ro" \
+            "$CHECKOV_IMAGE" \
+            --directory /workspace \
+            --framework dockerfile github_actions terraform kubernetes yaml \
+            --compact \
+            --quiet
+
+  image-security:
+    name: Runtime image vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build runtime image
+        run: docker build --target runtime --tag "$RUNTIME_IMAGE" --file docker/Dockerfile .
+
+      - name: Export runtime image for isolated scanning
+        run: docker save --output "${RUNNER_TEMP}/taskflow-runtime.tar" "$RUNTIME_IMAGE"
+
+      - name: Scan runtime image with Trivy
+        run: |
+          mkdir -p "${RUNNER_TEMP}/trivy-cache"
+          docker run --rm \
+            --volume "${RUNNER_TEMP}/taskflow-runtime.tar:/scan/taskflow-runtime.tar:ro" \
+            --volume "${RUNNER_TEMP}/trivy-cache:/root/.cache/" \
+            "$TRIVY_IMAGE" \
+            image \
+            --input /scan/taskflow-runtime.tar \
+            --scanners vuln \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --severity HIGH,CRITICAL
+
   runtime-image:
     name: Runtime image smoke test
-    needs: test
+    needs:
+      - test
+      - sast-and-dependencies
+      - secrets
+      - infrastructure-security
+      - image-security
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
