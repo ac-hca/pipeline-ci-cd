@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*.*.*"
   pull_request:
     branches:
       - main
@@ -16,6 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ac-hca/pipeline-ci-cd
   TEST_IMAGE: taskflow-api:test
   RUNTIME_IMAGE: taskflow-api:runtime
   GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
@@ -244,3 +248,72 @@ jobs:
       - name: Clean up runtime container
         if: always()
         run: docker rm --force taskflow-runtime || true
+
+  publish-image:
+    name: Publish runtime image to GHCR
+    if: github.event_name == 'push'
+    needs:
+      - runtime-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login "$REGISTRY" --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build traceable runtime image
+        id: build
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:7}"
+          sha_ref="${REGISTRY}/${IMAGE_NAME}:sha-${short_sha}"
+
+          docker build \
+            --target runtime \
+            --tag "$sha_ref" \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${GITHUB_REF_NAME}" \
+            --file docker/Dockerfile \
+            .
+
+          echo "sha_ref=$sha_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Publish image tags
+        env:
+          SHA_REF: ${{ steps.build.outputs.sha_ref }}
+        run: |
+          set -euo pipefail
+          image_refs=("$SHA_REF")
+
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            image_refs+=("${REGISTRY}/${IMAGE_NAME}:main")
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Unsupported release tag: $GITHUB_REF_NAME" >&2
+              exit 1
+            fi
+            image_refs+=("${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}")
+          fi
+
+          for image_ref in "${image_refs[@]}"; do
+            if [ "$image_ref" != "$SHA_REF" ]; then
+              docker tag "$SHA_REF" "$image_ref"
+            fi
+            docker push "$image_ref"
+          done
+
+          {
+            echo "### Published container images"
+            for image_ref in "${image_refs[@]}"; do
+              printf -- '- `%s`\n' "$image_ref"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
