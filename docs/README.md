@@ -187,4 +187,9 @@ Los mensajes de error no deben revelar credenciales, consultas internas, trazas 
 
 ## Documentación complementaria
 
-Las subcarpetas de este directorio quedan reservadas para documentar arquitectura, Docker, CI/CD, Terraform, Kubernetes, monitoreo, FinOps, evidencias e informe final a medida que avance el proyecto.
+- [Entorno local con Docker](docker/README.md)
+- [Integración continua y seguridad](ci-cd/README.md)
+- [Registro de imágenes en GHCR](registry/README.md)
+
+Las futuras subcarpetas documentarán Terraform, Kubernetes, monitoreo, FinOps, evidencias e
+informe final a medida que avance el proyecto.

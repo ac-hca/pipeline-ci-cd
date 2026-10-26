@@ -66,3 +66,9 @@ de despliegue.
 
 DAST no se ejecuta todavía. Se incorporará cuando exista un entorno de pruebas desplegado y una
 URL estable contra la cual realizar análisis dinámico sin afectar producción.
+
+## Publicación de la imagen aprobada
+
+Después de que todos los controles anteriores y el smoke test finalicen correctamente, los pushes
+a `main` y los tags de versión publican la imagen runtime en GHCR. La estrategia de permisos,
+eventos y etiquetas se documenta en [Registro de imágenes](../registry/README.md).
