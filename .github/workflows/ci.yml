@@ -27,6 +27,7 @@ env:
   CHECKOV_IMAGE: bridgecrew/checkov:3.3.29
   TRIVY_IMAGE: aquasec/trivy:0.76.0
   SECURITY_PYTHON_IMAGE: python:3.12-slim
+  TERRAFORM_VERSION: 1.16.7
 
 jobs:
   test:
@@ -146,6 +147,35 @@ jobs:
             "$GITLEAKS_IMAGE" \
             git --redact --verbose /repository
 
+  terraform:
+    name: Terraform format and validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: terraform/environments/development
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Check Terraform formatting
+        working-directory: .
+        run: terraform fmt -check -recursive terraform
+
+      - name: Initialize Terraform without a remote backend
+        run: terraform init -backend=false -input=false
+
+      - name: Validate Terraform configuration
+        run: terraform validate -no-color
+
   infrastructure-security:
     name: Dockerfile and infrastructure review
     runs-on: ubuntu-latest
@@ -162,13 +192,23 @@ jobs:
             "$HADOLINT_IMAGE" \
             hadolint /workspace/docker/Dockerfile
 
-      - name: Scan infrastructure as code with Checkov
+      - name: Scan container and workflow configuration with Checkov
         run: |
           docker run --rm \
             --volume "$PWD:/workspace:ro" \
             "$CHECKOV_IMAGE" \
             --directory /workspace \
-            --framework dockerfile github_actions terraform kubernetes yaml \
+            --framework dockerfile github_actions kubernetes yaml \
+            --compact \
+            --quiet
+
+      - name: Scan Terraform with Checkov
+        run: |
+          docker run --rm \
+            --volume "$PWD:/workspace:ro" \
+            "$CHECKOV_IMAGE" \
+            --directory /workspace/terraform \
+            --framework terraform \
             --compact \
             --quiet
 
@@ -209,6 +249,7 @@ jobs:
       - secrets
       - infrastructure-security
       - image-security
+      - terraform
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
