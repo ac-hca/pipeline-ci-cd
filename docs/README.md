@@ -1,6 +1,7 @@
 # Contrato de la API
 
-Este documento define el contrato funcional inicial de TaskFlow API. Por el momento representa el diseño acordado; todavía no existe una implementación.
+Este documento define el contrato funcional de TaskFlow API. La implementación actual conserva
+estas rutas, validaciones y respuestas como referencia pública del servicio.
 
 ## Convenciones generales
 
@@ -187,9 +188,11 @@ Los mensajes de error no deben revelar credenciales, consultas internas, trazas 
 
 ## Documentación complementaria
 
+- [Decisión de plataforma local](architecture/README.md)
 - [Entorno local con Docker](docker/README.md)
 - [Integración continua y seguridad](ci-cd/README.md)
 - [Registro de imágenes en GHCR](registry/README.md)
+- [Alcance y handoff de Terraform](terraform/README.md)
 
-Las futuras subcarpetas documentarán Terraform, Kubernetes, monitoreo, FinOps, evidencias e
-informe final a medida que avance el proyecto.
+Las futuras subcarpetas documentarán Kubernetes, monitoreo, FinOps, evidencias e informe final a
+medida que avance el proyecto.

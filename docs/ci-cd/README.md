@@ -64,8 +64,9 @@ Las versiones de las herramientas están fijadas para que los resultados sean re
 Todos los jobs utilizan permisos de solo lectura sobre el repositorio y no reciben credenciales
 de despliegue.
 
-DAST no se ejecuta todavía. Se incorporará cuando exista un entorno de pruebas desplegado y una
-URL estable contra la cual realizar análisis dinámico sin afectar producción.
+DAST no se ejecuta todavía. Se incorporará cuando exista un entorno de pruebas desplegado en
+Minikube. En CI se analizará una URL temporal del mismo job y, localmente, una URL expuesta por el
+clúster; no dependerá de un entorno cloud permanente.
 
 ## Publicación de la imagen aprobada
 

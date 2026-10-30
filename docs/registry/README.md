@@ -97,8 +97,10 @@ printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username ac-hca --password-st
 docker pull ghcr.io/ac-hca/pipeline-ci-cd:sha-ef76408
 ```
 
-Cuando la imagen se utilice en Kubernetes, la autenticación se configurará mediante un Secret o
-la identidad del proveedor cloud. El token nunca se escribirá directamente en un manifiesto.
+Cuando la imagen privada se utilice en Minikube, la autenticación se configurará mediante un
+Secret creado en tiempo de ejecución. Como alternativa para el desarrollo, se podrá cargar una
+imagen construida localmente en el clúster. El token nunca se escribirá directamente en un
+manifiesto ni se guardará en el repositorio.
 
 ## Verificación
 
@@ -127,3 +129,8 @@ image: ghcr.io/ac-hca/pipeline-ci-cd:sha-ef76408
 
 Esto permite conocer exactamente qué código está ejecutándose y volver a una imagen anterior sin
 reconstruirla.
+
+La imagen publicada actualmente se construye en un runner `linux/amd64`. Antes de utilizarla en
+la máquina Apple Silicon del proyecto se deberá habilitar una publicación multi-arquitectura o
+usar una imagen local `arm64`. Esta adaptación se realizará durante la etapa de Kubernetes y no
+modifica la estrategia de etiquetas.
