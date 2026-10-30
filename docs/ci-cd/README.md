@@ -57,7 +57,7 @@ prueba de la imagen runtime:
 | Dependencias | pip-audit | Dependencias declaradas en `requirements.txt` | Vulnerabilidades conocidas sin una exclusión explícita. |
 | Secretos | Gitleaks | Historial Git completo | Cualquier credencial o secreto detectado. |
 | Dockerfile | Hadolint | `docker/Dockerfile` | Incumplimientos de buenas prácticas del linter. |
-| Infraestructura | Checkov | Docker Compose, GitHub Actions y futuros archivos Terraform/Kubernetes | Configuraciones inseguras detectadas. |
+| Infraestructura | Checkov | Docker Compose, GitHub Actions, Terraform y futuros manifiestos Kubernetes | Configuraciones inseguras detectadas. |
 | Imagen | Trivy | Exportación TAR de la imagen final `runtime`, sin acceso al socket de Docker | Vulnerabilidades `HIGH` o `CRITICAL` que tengan corrección disponible. |
 
 Las versiones de las herramientas están fijadas para que los resultados sean reproducibles.
@@ -67,6 +67,16 @@ de despliegue.
 DAST no se ejecuta todavía. Se incorporará cuando exista un entorno de pruebas desplegado en
 Minikube. En CI se analizará una URL temporal del mismo job y, localmente, una URL expuesta por el
 clúster; no dependerá de un entorno cloud permanente.
+
+## Validación de Terraform
+
+El workflow ejecuta un job independiente para comprobar el formato de todos los archivos Terraform,
+inicializar el entorno `development` sin backend remoto y validar su configuración. La versión de
+Terraform está fijada y el provider Minikube se resuelve mediante el lock file versionado.
+
+Checkov analiza `terraform/` en un paso explícito. Esta validación no crea infraestructura, no
+requiere credenciales cloud y no administra GHCR. El ciclo real `apply`, verificación y `destroy` se
+mantiene como prueba local hasta incorporar una prueba efímera controlada en GitHub Actions.
 
 ## Publicación de la imagen aprobada
 
