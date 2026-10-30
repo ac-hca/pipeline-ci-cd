@@ -1,0 +1,10 @@
+# Copy this file to terraform.tfvars only when overriding the safe defaults.
+# terraform.tfvars is ignored because local values must not be committed.
+
+cluster_name       = "taskflow-development"
+driver             = "docker"
+kubernetes_version = "v1.37.0"
+cpus               = 4
+memory             = 6
+disk_size          = 20
+nodes              = 1
