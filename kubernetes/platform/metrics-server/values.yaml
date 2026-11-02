@@ -1,0 +1,21 @@
+args:
+  - --kubelet-insecure-tls
+
+replicas: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 100Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+podDisruptionBudget:
+  enabled: false
+
+metrics:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
