@@ -57,9 +57,23 @@ docker run --rm \
   -J zap-report.json \
   -w zap-report.md 2>&1 | tee "$evidence_dir/zap/console.log"
 zap_status="${PIPESTATUS[0]}"
+
+host_uid="$(id -u)"
+host_gid="$(id -g)"
+docker run --rm \
+  --user 0:0 \
+  --volume "$evidence_dir/zap:/zap/wrk:rw" \
+  "$zap_image" \
+  chown -R "${host_uid}:${host_gid}" /zap/wrk
+permission_status="$?"
 set -e
 
-chmod -R a+rX "$evidence_dir/zap"
+if [[ "$permission_status" -ne 0 ]]; then
+  echo "Could not normalize OWASP ZAP report ownership" >&2
+  exit "$permission_status"
+fi
+
+chmod -R u+rwX,go+rX "$evidence_dir/zap"
 
 if [[ "$zap_status" -ne 0 ]]; then
   echo "OWASP ZAP failed with exit code $zap_status" >&2
