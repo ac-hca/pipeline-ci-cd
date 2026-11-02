@@ -24,6 +24,7 @@ env:
   RUNTIME_IMAGE: taskflow-api:runtime
   GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
   HADOLINT_IMAGE: hadolint/hadolint:v2.15.1-debian
+  SHELLCHECK_IMAGE: koalaman/shellcheck-alpine:v0.11.0
   CHECKOV_IMAGE: bridgecrew/checkov:3.3.29
   KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.8.0-alpine
   TRIVY_IMAGE: aquasec/trivy:0.76.0
@@ -251,6 +252,14 @@ jobs:
             --volume "$PWD:/workspace:ro" \
             "$HADOLINT_IMAGE" \
             hadolint /workspace/docker/Dockerfile
+
+      - name: Lint delivery scripts with ShellCheck
+        run: |
+          docker run --rm \
+            --volume "$PWD:/workspace:ro" \
+            --workdir /workspace \
+            "$SHELLCHECK_IMAGE" \
+            shellcheck scripts/cd/*.sh
 
       - name: Scan container and workflow configuration with Checkov
         run: |
