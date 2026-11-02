@@ -221,8 +221,9 @@ automáticamente. Se declararon de forma explícita y el plan repetido finalizó
   checksum.
 - Minikube es un entorno de desarrollo y pruebas. El directorio `production` permanece reservado y
   no simula infraestructura productiva.
-- La publicación multi-arquitectura, GHCR privado, Ingress, HPA, PostgreSQL y monitoreo pertenecen a
-  etapas posteriores.
+- La publicación multi-arquitectura, Ingress, HPA y PostgreSQL se implementan fuera de Terraform
+  mediante GitHub Actions y manifiestos Kubernetes. Prometheus y Grafana pertenecen a una etapa
+  posterior.
 
 ## Referencias
 

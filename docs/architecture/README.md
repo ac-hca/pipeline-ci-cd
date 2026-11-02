@@ -85,11 +85,10 @@ las métricas necesarias para la demostración y no se configurará alta disponi
 - El HPA podrá escalar Pods, pero un clúster de un nodo no demostrará escalado de máquinas.
 - La red local no reproduce balanceadores ni zonas de disponibilidad de un proveedor cloud.
 - El provider de Terraform para Minikube es comunitario y deberá fijarse a una versión concreta.
-- En macOS con el driver Docker no se debe depender del addon de Ingress de Minikube. El
-  controlador se instalará explícitamente durante la etapa de Kubernetes.
-- La imagen publicada actualmente por GitHub Actions se construye en `linux/amd64`, mientras que
-  la máquina local usa Apple Silicon. Antes del despliegue desde GHCR se deberá publicar una
-  imagen multi-arquitectura o cargar en Minikube una imagen construida localmente para `arm64`.
+- En macOS con el driver Docker no se depende del addon de Ingress de Minikube. El proyecto usa
+  F5 NGINX Ingress Controller con un Service `ClusterIP` y acceso local por port-forward.
+- GitHub Actions publica la imagen runtime para `linux/amd64` y `linux/arm64`. Desarrollo también
+  permite construir y cargar una imagen ARM64 directamente en Minikube sin depender de GHCR.
 
 Estas diferencias deben explicarse en el informe final; no invalidan la demostración académica.
 

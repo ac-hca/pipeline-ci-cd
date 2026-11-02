@@ -193,6 +193,7 @@ Los mensajes de error no deben revelar credenciales, consultas internas, trazas 
 - [Integración continua y seguridad](ci-cd/README.md)
 - [Registro de imágenes en GHCR](registry/README.md)
 - [Alcance y handoff de Terraform](terraform/README.md)
+- [Despliegue local con Kubernetes](kubernetes/README.md)
 
-Las futuras subcarpetas documentarán Kubernetes, monitoreo, FinOps, evidencias e informe final a
+Las futuras subcarpetas documentarán monitoreo, FinOps, evidencias e informe final a
 medida que avance el proyecto.

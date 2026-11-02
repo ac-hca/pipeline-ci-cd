@@ -10,6 +10,16 @@ La publicación forma parte del workflow de integración continua. No se publica
 desde un pull request ni antes de que finalicen correctamente las migraciones, pruebas, controles
 de calidad, análisis de seguridad y smoke test de la imagen runtime.
 
+Cada publicación genera un único manifest list multi-arquitectura mediante Docker Buildx y QEMU:
+
+```text
+linux/amd64
+linux/arm64
+```
+
+La misma referencia funciona en los runners Ubuntu AMD64 de GitHub Actions y en el Minikube local
+sobre Apple Silicon ARM64. No se mantiene una etiqueta diferente por arquitectura.
+
 ## Estrategia de etiquetas
 
 | Evento | Etiquetas publicadas | Finalidad |
@@ -118,6 +128,14 @@ docker image inspect ghcr.io/ac-hca/pipeline-ci-cd:sha-ef76408 \
 
 El resultado debe ser el SHA completo del commit usado por GitHub Actions.
 
+También se deben comprobar las plataformas del manifest list sin descargar todas sus capas:
+
+```bash
+docker buildx imagetools inspect ghcr.io/ac-hca/pipeline-ci-cd:sha-ef76408
+```
+
+La salida debe incluir manifiestos para `linux/amd64` y `linux/arm64`.
+
 ## Uso posterior en despliegues
 
 Los manifiestos de Kubernetes no dependerán de `main`. Un despliegue utilizará una referencia
@@ -128,9 +146,6 @@ image: ghcr.io/ac-hca/pipeline-ci-cd:sha-ef76408
 ```
 
 Esto permite conocer exactamente qué código está ejecutándose y volver a una imagen anterior sin
-reconstruirla.
-
-La imagen publicada actualmente se construye en un runner `linux/amd64`. Antes de utilizarla en
-la máquina Apple Silicon del proyecto se deberá habilitar una publicación multi-arquitectura o
-usar una imagen local `arm64`. Esta adaptación se realizará durante la etapa de Kubernetes y no
-modifica la estrategia de etiquetas.
+reconstruirla. El overlay local de desarrollo utiliza una imagen construida y cargada directamente
+en Minikube; el procedimiento y la creación del pull secret para GHCR privado están documentados en
+[Kubernetes para TaskFlow API](../kubernetes/README.md).

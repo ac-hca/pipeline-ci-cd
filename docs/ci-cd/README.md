@@ -57,7 +57,7 @@ prueba de la imagen runtime:
 | Dependencias | pip-audit | Dependencias declaradas en `requirements.txt` | Vulnerabilidades conocidas sin una exclusión explícita. |
 | Secretos | Gitleaks | Historial Git completo | Cualquier credencial o secreto detectado. |
 | Dockerfile | Hadolint | `docker/Dockerfile` | Incumplimientos de buenas prácticas del linter. |
-| Infraestructura | Checkov | Docker Compose, GitHub Actions, Terraform y futuros manifiestos Kubernetes | Configuraciones inseguras detectadas. |
+| Infraestructura | Checkov | Docker Compose, GitHub Actions, Terraform y manifiestos Kubernetes renderizados | Configuraciones inseguras detectadas. |
 | Imagen | Trivy | Exportación TAR de la imagen final `runtime`, sin acceso al socket de Docker | Vulnerabilidades `HIGH` o `CRITICAL` que tengan corrección disponible. |
 
 Las versiones de las herramientas están fijadas para que los resultados sean reproducibles.
@@ -78,8 +78,27 @@ Checkov analiza `terraform/` en un paso explícito. Esta validación no crea inf
 requiere credenciales cloud y no administra GHCR. El ciclo real `apply`, verificación y `destroy` se
 mantiene como prueba local hasta incorporar una prueba efímera controlada en GitHub Actions.
 
+## Validación de Kubernetes
+
+El job `Kubernetes manifests` utiliza kubectl `v1.37.0` y entradas de ejemplo no sensibles para:
+
+- rechazar archivos de secretos runtime que hayan sido versionados;
+- renderizar los overlays `development` y `production` con Kustomize;
+- validar 30 recursos con Kubeconform `0.8.0` en modo estricto;
+- ejecutar Checkov `3.3.29` sobre el resultado completo, no sobre parches aislados.
+
+Los manifiestos renderizados se escriben en el directorio temporal del runner y no se conservan
+como artefactos. El overlay de producción se valida, pero no se despliega. El ciclo real de
+Minikube, PostgreSQL, migraciones, API, Ingress, métricas y cleanup fue probado localmente y se
+documenta en [Kubernetes para TaskFlow API](../kubernetes/README.md).
+
+No se agregó aún una prueba real de despliegue en GitHub Actions. Cuando se incorpore deberá crear
+un clúster temporal y ejecutar `terraform destroy` bajo `if: always()`.
+
 ## Publicación de la imagen aprobada
 
 Después de que todos los controles anteriores y el smoke test finalicen correctamente, los pushes
-a `main` y los tags de versión publican la imagen runtime en GHCR. La estrategia de permisos,
-eventos y etiquetas se documenta en [Registro de imágenes](../registry/README.md).
+a `main` y los tags de versión publican la imagen runtime en GHCR. Buildx y QEMU generan un único
+manifest list para `linux/amd64` y `linux/arm64`; se mantienen las etiquetas `sha-*`, `main` y
+`vX.Y.Z` según el evento. La estrategia de permisos, eventos y etiquetas se documenta en
+[Registro de imágenes](../registry/README.md).
