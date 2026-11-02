@@ -43,10 +43,10 @@ capture pvc.txt kubectl --context "$cluster_context" -n "$namespace" get pvc
 capture events.txt kubectl --context "$cluster_context" -n "$namespace" get events --sort-by=.metadata.creationTimestamp
 capture api-description.txt kubectl --context "$cluster_context" -n "$namespace" describe deployment taskflow-api
 capture postgres-description.txt kubectl --context "$cluster_context" -n "$namespace" describe statefulset taskflow-postgres
-capture migration-description.txt kubectl --context "$cluster_context" -n "$namespace" describe job taskflow-migrate
+capture migration-description-final.txt kubectl --context "$cluster_context" -n "$namespace" describe job taskflow-migrate
 capture api-logs.txt kubectl --context "$cluster_context" -n "$namespace" logs deployment/taskflow-api --all-containers --prefix
 capture postgres-logs.txt kubectl --context "$cluster_context" -n "$namespace" logs statefulset/taskflow-postgres --all-containers --prefix
-capture migration-logs.txt kubectl --context "$cluster_context" -n "$namespace" logs job/taskflow-migrate --all-containers --prefix
+capture migration-logs-final.txt kubectl --context "$cluster_context" -n "$namespace" logs job/taskflow-migrate --all-containers --prefix
 capture metrics.txt kubectl --context "$cluster_context" top pods -n "$namespace"
 capture helm-releases.txt helm list --all-namespaces --kube-context "$cluster_context"
 capture terraform-outputs.json terraform -chdir="$terraform_dir" output -json

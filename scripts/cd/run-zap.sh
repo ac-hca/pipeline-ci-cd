@@ -52,6 +52,7 @@ docker run --rm \
   -s \
   -l INFO \
   -T 5 \
+  -z "-config autoupdate.checkOnStart=false -config autoupdate.downloadNewRelease=false -config autoupdate.installAddonUpdates=false -config autoupdate.installScannerRules=false" \
   -r zap-report.html \
   -J zap-report.json \
   -w zap-report.md 2>&1 | tee "$evidence_dir/zap/console.log"

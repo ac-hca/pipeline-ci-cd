@@ -201,6 +201,11 @@ jobs:
           kubectl --context "$KUBERNETES_CONTEXT" -n "$TASKFLOW_NAMESPACE" \
             wait --for=condition=complete job/taskflow-migrate --timeout=5m
           kubectl --context "$KUBERNETES_CONTEXT" -n "$TASKFLOW_NAMESPACE" \
+            describe job taskflow-migrate > "$EVIDENCE_DIR/migration-description.txt"
+          kubectl --context "$KUBERNETES_CONTEXT" -n "$TASKFLOW_NAMESPACE" \
+            logs job/taskflow-migrate --all-containers --prefix \
+            > "$EVIDENCE_DIR/migration-logs.txt"
+          kubectl --context "$KUBERNETES_CONTEXT" -n "$TASKFLOW_NAMESPACE" \
             rollout status deployment/taskflow-api --timeout=5m
           kubectl --context "$KUBERNETES_CONTEXT" -n "$TASKFLOW_NAMESPACE" \
             wait --for=condition=Available deployment/taskflow-api --timeout=2m
