@@ -25,9 +25,11 @@ env:
   GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
   HADOLINT_IMAGE: hadolint/hadolint:v2.15.1-debian
   CHECKOV_IMAGE: bridgecrew/checkov:3.3.29
+  KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.8.0-alpine
   TRIVY_IMAGE: aquasec/trivy:0.76.0
   SECURITY_PYTHON_IMAGE: python:3.12-slim
   TERRAFORM_VERSION: 1.16.7
+  KUBERNETES_VERSION: v1.37.0
 
 jobs:
   test:
@@ -63,7 +65,7 @@ jobs:
       - name: Wait for PostgreSQL
         run: |
           set -euo pipefail
-          for attempt in {1..30}; do
+          for _attempt in {1..30}; do
             health_status="$(docker inspect --format='{{.State.Health.Status}}' taskflow-postgres)"
             if [ "$health_status" = "healthy" ]; then
               exit 0
@@ -176,6 +178,64 @@ jobs:
       - name: Validate Terraform configuration
         run: terraform validate -no-color
 
+  kubernetes:
+    name: Kubernetes manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBERNETES_VERSION }}
+
+      - name: Reject committed runtime secrets
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)(secrets\.env|[^/]*-secrets?\.ya?ml)$'; then
+            echo "Runtime Kubernetes secrets must not be committed" >&2
+            exit 1
+          fi
+
+      - name: Prepare non-sensitive validation inputs
+        run: |
+          cp kubernetes/overlays/development/secrets.env.example \
+            kubernetes/overlays/development/secrets.env
+          cp kubernetes/overlays/production/secrets.env.example \
+            kubernetes/overlays/production/secrets.env
+          mkdir -p "${RUNNER_TEMP}/kubernetes-rendered"
+
+      - name: Render development and production overlays
+        run: |
+          kubectl kustomize kubernetes/overlays/development \
+            > "${RUNNER_TEMP}/kubernetes-rendered/development.yaml"
+          kubectl kustomize kubernetes/overlays/production \
+            > "${RUNNER_TEMP}/kubernetes-rendered/production.yaml"
+
+      - name: Validate Kubernetes schemas
+        run: |
+          docker run --rm \
+            --volume "${RUNNER_TEMP}/kubernetes-rendered:/manifests:ro" \
+            "$KUBECONFORM_IMAGE" \
+            -strict \
+            -summary \
+            -kubernetes-version 1.37.0 \
+            /manifests/development.yaml \
+            /manifests/production.yaml
+
+      - name: Scan rendered manifests with Checkov
+        run: |
+          docker run --rm \
+            --volume "${RUNNER_TEMP}/kubernetes-rendered:/manifests:ro" \
+            "$CHECKOV_IMAGE" \
+            --directory /manifests \
+            --framework kubernetes \
+            --compact \
+            --quiet
+
   infrastructure-security:
     name: Dockerfile and infrastructure review
     runs-on: ubuntu-latest
@@ -198,7 +258,8 @@ jobs:
             --volume "$PWD:/workspace:ro" \
             "$CHECKOV_IMAGE" \
             --directory /workspace \
-            --framework dockerfile github_actions kubernetes yaml \
+            --framework dockerfile github_actions yaml \
+            --skip-path /workspace/kubernetes \
             --compact \
             --quiet
 
@@ -250,6 +311,7 @@ jobs:
       - infrastructure-security
       - image-security
       - terraform
+      - kubernetes
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -270,7 +332,7 @@ jobs:
       - name: Verify application startup
         run: |
           set -euo pipefail
-          for attempt in {1..30}; do
+          for _attempt in {1..30}; do
             if curl --fail --silent --show-error http://127.0.0.1:8000/health/live; then
               exit 0
             fi
@@ -305,35 +367,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Log in to GitHub Container Registry
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: printf '%s' "$GHCR_TOKEN" | docker login "$REGISTRY" --username "$GITHUB_ACTOR" --password-stdin
-
-      - name: Build traceable runtime image
-        id: build
+      - name: Prepare immutable image references
+        id: refs
         run: |
           set -euo pipefail
           short_sha="${GITHUB_SHA:0:7}"
           sha_ref="${REGISTRY}/${IMAGE_NAME}:sha-${short_sha}"
-
-          docker build \
-            --target runtime \
-            --tag "$sha_ref" \
-            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
-            --label "org.opencontainers.image.version=${GITHUB_REF_NAME}" \
-            --file docker/Dockerfile \
-            .
-
-          echo "sha_ref=$sha_ref" >> "$GITHUB_OUTPUT"
-
-      - name: Publish image tags
-        env:
-          SHA_REF: ${{ steps.build.outputs.sha_ref }}
-        run: |
-          set -euo pipefail
-          image_refs=("$SHA_REF")
+          image_refs=("$sha_ref")
 
           if [ "$GITHUB_REF" = "refs/heads/main" ]; then
             image_refs+=("${REGISTRY}/${IMAGE_NAME}:main")
@@ -345,16 +385,52 @@ jobs:
             image_refs+=("${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}")
           fi
 
-          for image_ref in "${image_refs[@]}"; do
-            if [ "$image_ref" != "$SHA_REF" ]; then
-              docker tag "$SHA_REF" "$image_ref"
-            fi
-            docker push "$image_ref"
-          done
-
           {
-            echo "### Published container images"
-            for image_ref in "${image_refs[@]}"; do
-              printf -- '- `%s`\n' "$image_ref"
-            done
+            echo "tags<<EOF"
+            printf '%s\n' "${image_refs[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish multi-architecture image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.refs.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: Summarize published image
+        env:
+          IMAGE_REFS: ${{ steps.refs.outputs.tags }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### Published multi-architecture image"
+            echo
+            echo "Platforms: \`linux/amd64\`, \`linux/arm64\`"
+            echo "Digest: \`$IMAGE_DIGEST\`"
+            echo
+            while IFS= read -r image_ref; do
+              printf -- '- %s\n' "$image_ref"
+            done <<< "$IMAGE_REFS"
           } >> "$GITHUB_STEP_SUMMARY"
