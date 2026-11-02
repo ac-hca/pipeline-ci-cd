@@ -1,0 +1,48 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: taskflow-api
+  labels:
+    app.kubernetes.io/name: taskflow-api
+    app.kubernetes.io/component: ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: taskflow.local
+      http:
+        paths:
+          - path: /health/live
+            pathType: Prefix
+            backend:
+              service:
+                name: taskflow-api
+                port:
+                  name: http
+          - path: /health/ready
+            pathType: Prefix
+            backend:
+              service:
+                name: taskflow-api
+                port:
+                  name: http
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: taskflow-api
+                port:
+                  name: http
+          - path: /api/v1/tasks
+            pathType: Prefix
+            backend:
+              service:
+                name: taskflow-api
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: taskflow-api
+                port:
+                  name: http

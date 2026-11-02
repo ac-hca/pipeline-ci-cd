@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: taskflow-production
+
+resources:
+  - ../../base
+  - namespace.yaml
+
+configMapGenerator:
+  - name: taskflow-config
+    literals:
+      - APP_NAME=TaskFlow API
+      - APP_ENV=production
+      - APP_VERSION=0.1.0
+      - LOG_LEVEL=INFO
+      - CORS_ALLOWED_ORIGINS=
+
+secretGenerator:
+  - name: taskflow-secrets
+    envs:
+      - secrets.env
+
+images:
+  - name: taskflow-api
+    newName: ghcr.io/ac-hca/pipeline-ci-cd
+    newTag: sha-a799c79
+
+patches:
+  - path: patches/api-deployment.yaml
+  - path: patches/api-hpa.yaml
+  - path: patches/api-pdb.yaml
+  - path: patches/ingress.yaml
+  - path: patches/migration-job.yaml
+  - path: patches/postgres-storage.yaml

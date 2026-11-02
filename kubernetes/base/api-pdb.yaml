@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: taskflow-api
+  labels:
+    app.kubernetes.io/name: taskflow-api
+    app.kubernetes.io/component: availability
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taskflow-api
+      app.kubernetes.io/component: api

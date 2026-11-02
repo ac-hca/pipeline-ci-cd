@@ -57,6 +57,8 @@ kubeconfig
 kubeconfig.*
 *-secret.yaml
 *-secrets.yaml
+kubernetes/**/secrets.env
+rendered-*.yaml
 
 # Editors and IDEs
 .idea/

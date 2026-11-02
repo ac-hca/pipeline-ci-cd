@@ -1,0 +1,7 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: taskflow-api
+spec:
+  maxUnavailable: null
+  minAvailable: 1

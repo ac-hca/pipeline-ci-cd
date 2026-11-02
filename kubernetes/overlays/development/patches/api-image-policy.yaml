@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-api
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-for-migrations
+          imagePullPolicy: Never
+      containers:
+        - name: api
+          imagePullPolicy: Never
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: taskflow-migrate
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          imagePullPolicy: Never
+      containers:
+        - name: migrate
+          imagePullPolicy: Never

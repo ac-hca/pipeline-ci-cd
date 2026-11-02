@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: taskflow-migrate
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+        - name: ghcr-credentials
+      initContainers:
+        - name: wait-for-postgres
+          imagePullPolicy: Always
+      containers:
+        - name: migrate
+          imagePullPolicy: Always
