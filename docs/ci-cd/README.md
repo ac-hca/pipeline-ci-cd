@@ -64,9 +64,10 @@ Las versiones de las herramientas están fijadas para que los resultados sean re
 Todos los jobs utilizan permisos de solo lectura sobre el repositorio y no reciben credenciales
 de despliegue.
 
-DAST no se ejecuta todavía. Se incorporará cuando exista un entorno de pruebas desplegado en
-Minikube. En CI se analizará una URL temporal del mismo job y, localmente, una URL expuesta por el
-clúster; no dependerá de un entorno cloud permanente.
+DAST se ejecuta en el workflow separado `Continuous Delivery`, después de crear un Minikube
+temporal y desplegar la imagen inmutable aprobada. OWASP ZAP `2.17.0` analiza el contrato OpenAPI;
+las reglas bloqueantes y los reportes se documentan en
+[Entrega continua de TaskFlow](../delivery/README.md).
 
 ## Validación de Terraform
 
@@ -75,8 +76,9 @@ inicializar el entorno `development` sin backend remoto y validar su configuraci
 Terraform está fijada y el provider Minikube se resuelve mediante el lock file versionado.
 
 Checkov analiza `terraform/` en un paso explícito. Esta validación no crea infraestructura, no
-requiere credenciales cloud y no administra GHCR. El ciclo real `apply`, verificación y `destroy` se
-mantiene como prueba local hasta incorporar una prueba efímera controlada en GitHub Actions.
+requiere credenciales cloud y no administra GHCR. Después de un CI exitoso sobre `main`, el
+workflow de entrega ejecuta el ciclo real `plan`, `apply`, verificación y `destroy` en un runner
+temporal.
 
 ## Validación de Kubernetes
 
@@ -92,8 +94,8 @@ como artefactos. El overlay de producción se valida, pero no se despliega. El c
 Minikube, PostgreSQL, migraciones, API, Ingress, métricas y cleanup fue probado localmente y se
 documenta en [Kubernetes para TaskFlow API](../kubernetes/README.md).
 
-No se agregó aún una prueba real de despliegue en GitHub Actions. Cuando se incorpore deberá crear
-un clúster temporal y ejecutar `terraform destroy` bajo `if: always()`.
+El workflow de entrega despliega únicamente development y ejecuta `terraform destroy` bajo
+`if: always()`. Producción continúa siendo un overlay renderizable y no se aplica.
 
 ## Publicación de la imagen aprobada
 
@@ -102,3 +104,14 @@ a `main` y los tags de versión publican la imagen runtime en GHCR. Buildx y QEM
 manifest list para `linux/amd64` y `linux/arm64`; se mantienen las etiquetas `sha-*`, `main` y
 `vX.Y.Z` según el evento. La estrategia de permisos, eventos y etiquetas se documenta en
 [Registro de imágenes](../registry/README.md).
+
+## Entrega de la imagen aprobada
+
+`Continuous Delivery` se activa solo después de que el workflow completo de CI finaliza con éxito
+para un push a `main`. El SHA del evento determina el checkout y la etiqueta `sha-*`; el label OCI
+de la imagen debe coincidir antes de crear infraestructura.
+
+El workflow usa permisos `contents: read` y `packages: read`, genera secretos de prueba temporales,
+ejecuta migraciones, rollout, smoke tests y OWASP ZAP, y conserva evidencias durante 14 días. Los
+detalles operativos y el comportamiento de cleanup se encuentran en
+[Entrega continua de TaskFlow](../delivery/README.md).

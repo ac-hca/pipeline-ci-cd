@@ -149,3 +149,7 @@ Esto permite conocer exactamente qué código está ejecutándose y volver a una
 reconstruirla. El overlay local de desarrollo utiliza una imagen construida y cargada directamente
 en Minikube; el procedimiento y la creación del pull secret para GHCR privado están documentados en
 [Kubernetes para TaskFlow API](../kubernetes/README.md).
+
+El workflow de [entrega continua](../delivery/README.md) descarga la etiqueta `sha-*` producida por
+el CI que lo activó, verifica su label OCI de revisión y la carga en el Minikube temporal. El token
+de lectura permanece en el runner y no se copia al clúster.

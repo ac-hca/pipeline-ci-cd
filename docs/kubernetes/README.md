@@ -454,9 +454,10 @@ El job de publicación usa Buildx y QEMU para publicar un único manifest list c
 `linux/amd64` y `linux/arm64`. Continúa usando el `GITHUB_TOKEN` temporal y las etiquetas
 `sha-*`, `main` y `vX.Y.Z` según el evento.
 
-No se agregó todavía una prueba de despliegue real dentro de GitHub Actions. La validación real de
-esta etapa fue local; así se evita duplicar en CI un clúster costoso hasta diseñar correctamente su
-cleanup incondicional. DAST, Prometheus y Grafana permanecen fuera de alcance.
+El workflow `Continuous Delivery` reutiliza estos manifiestos para una prueba efímera posterior a
+CI. Crea Minikube con Terraform, despliega exclusivamente development, ejecuta smoke tests y DAST,
+recopila evidencias y destruye el clúster bajo `if: always()`. Prometheus y Grafana permanecen fuera
+de alcance.
 
 ## Resultado de la validación real
 
@@ -500,9 +501,10 @@ original mediante SQLAlchemy.
 - `--kubelet-insecure-tls` es una concesión exclusiva del entorno local.
 - El host, capacidad, almacenamiento, secretos y estrategia de PostgreSQL de producción requieren
   un diseño de plataforma real antes de cualquier uso productivo.
-- La ejecución del workflow y la publicación efectiva en GHCR se comprobarán después de que el
-  usuario realice el push.
-- Prometheus, Grafana y DAST pertenecen a etapas posteriores.
+- La ejecución remota del workflow y el consumo efectivo de la nueva imagen GHCR se comprobarán
+  después de que el usuario realice el push.
+- Prometheus y Grafana pertenecen a etapas posteriores. DAST está implementado en el workflow de
+  entrega y documentado en [Entrega continua](../delivery/README.md).
 
 ## Referencias
 

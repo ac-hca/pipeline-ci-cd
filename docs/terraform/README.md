@@ -177,10 +177,10 @@ terraform init -backend=false -input=false
 terraform validate -no-color
 ```
 
-El job de seguridad ejecuta además Checkov `3.3.29` específicamente sobre `terraform/`. Esta etapa
-es estática: no crea un clúster en cada push y no utiliza secretos cloud. La configuración queda
-preparada para agregar posteriormente una prueba efímera de infraestructura con `destroy` bajo
-`always()`.
+El job de seguridad ejecuta además Checkov `3.3.29` específicamente sobre `terraform/`. La etapa de
+CI es estática y no utiliza secretos cloud. Después de un CI exitoso sobre `main`, el workflow
+`Continuous Delivery` aplica esta configuración en un runner temporal y ejecuta `terraform
+destroy` bajo `if: always()`.
 
 ## Validación local realizada
 
