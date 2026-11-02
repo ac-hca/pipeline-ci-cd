@@ -24,7 +24,7 @@ env:
   TERRAFORM_VERSION: 1.16.7
   KUBERNETES_VERSION: v1.37.0
   MINIKUBE_VERSION: 1.39.0
-  MINIKUBE_LINUX_AMD64_SHA256: 099477eaf248bcb5bcea8ce78a2898e93ac01461c35189da1848c3de82ecd22e
+  MINIKUBE_LINUX_AMD64_SHA256: b738496da01be06bbaf80c688f57ce25acd3849fbb518155f3a88e03ef555aa4
   HELM_VERSION: v4.3.1
   ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.17.0
   KUBERNETES_CONTEXT: taskflow-development
@@ -135,6 +135,7 @@ jobs:
         run: |
           set -euo pipefail
           terraform -chdir="$TERRAFORM_DIR" init -input=false -no-color
+          touch "${RUNNER_TEMP}/taskflow-terraform-initialized"
           terraform -chdir="$TERRAFORM_DIR" validate -no-color
           terraform -chdir="$TERRAFORM_DIR" plan \
             -input=false \
@@ -266,24 +267,32 @@ jobs:
         if: always()
         run: |
           set +e
-          kubectl --context "$KUBERNETES_CONTEXT" delete \
-            -k kubernetes/overlays/development \
-            --ignore-not-found \
-            --wait=true \
-            --timeout=2m
-          helm uninstall nginx-ingress \
-            --namespace nginx-ingress \
-            --kube-context "$KUBERNETES_CONTEXT" \
-            --timeout 2m || true
-          helm uninstall metrics-server \
-            --namespace kube-system \
-            --kube-context "$KUBERNETES_CONTEXT" \
-            --timeout 2m || true
+          if [[ -s "$KUBECONFIG" ]]; then
+            kubectl --context "$KUBERNETES_CONTEXT" delete \
+              -k kubernetes/overlays/development \
+              --ignore-not-found \
+              --wait=true \
+              --timeout=2m
+            helm uninstall nginx-ingress \
+              --namespace nginx-ingress \
+              --kube-context "$KUBERNETES_CONTEXT" \
+              --timeout 2m || true
+            helm uninstall metrics-server \
+              --namespace kube-system \
+              --kube-context "$KUBERNETES_CONTEXT" \
+              --timeout 2m || true
+          fi
           rm -f kubernetes/overlays/development/secrets.env
 
       - name: Destroy Minikube with Terraform
         if: always()
         run: |
+          if [[ ! -f "${RUNNER_TEMP}/taskflow-terraform-initialized" ]]; then
+            echo "Terraform was not initialized; no managed cluster exists to destroy." \
+              > "$EVIDENCE_DIR/terraform-destroy.txt"
+            exit 0
+          fi
+
           set +e
           terraform -chdir="$TERRAFORM_DIR" destroy \
             -auto-approve \
@@ -298,23 +307,38 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          state_resources="$(terraform -chdir="$TERRAFORM_DIR" state list)"
+          state_resources=""
+          state_status=0
+          if [[ -f "${RUNNER_TEMP}/taskflow-terraform-initialized" ]]; then
+            set +e
+            state_resources="$(terraform -chdir="$TERRAFORM_DIR" state list \
+              2> "$EVIDENCE_DIR/terraform-state-error.txt")"
+            state_status="$?"
+            set -e
+          fi
+
           remaining_container="$(docker ps --all \
             --filter name=taskflow-development \
             --format '{{.ID}}')"
 
           {
+            echo "Terraform state command exit code: $state_status"
             echo "Terraform state resources: ${state_resources:-none}"
             echo "Minikube profiles:"
-            minikube profile list -o json || true
+            if command -v minikube >/dev/null 2>&1; then
+              minikube profile list -o json || true
+            else
+              echo "Minikube CLI was not installed before the workflow failed."
+            fi
             echo "Matching Docker containers: ${remaining_container:-none}"
           } > "$EVIDENCE_DIR/cleanup.txt"
 
-          if [[ -n "$state_resources" || -n "$remaining_container" ]]; then
+          if [[ "$state_status" -ne 0 || -n "$state_resources" || -n "$remaining_container" ]]; then
             echo "Delivery cleanup left managed resources behind" >&2
             exit 1
           fi
-          if minikube status --profile "$KUBERNETES_CONTEXT" >/dev/null 2>&1; then
+          if command -v minikube >/dev/null 2>&1 && \
+            minikube status --profile "$KUBERNETES_CONTEXT" >/dev/null 2>&1; then
             echo "Minikube profile still exists after Terraform destroy" >&2
             exit 1
           fi

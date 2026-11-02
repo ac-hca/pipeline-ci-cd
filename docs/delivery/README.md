@@ -76,6 +76,10 @@ El binario Minikube de Linux AMD64 se descarga desde su release oficial y se val
 SHA-256 versionado en el workflow. La imagen ZAP se fija por versión, deshabilita actualizaciones de
 add-ons durante el escaneo y registra su digest resuelto en las evidencias de cada ejecución.
 
+El asset Linux AMD64 de Minikube `1.39.0` está fijado al digest
+`b738496da01be06bbaf80c688f57ce25acd3849fbb518155f3a88e03ef555aa4`, comprobado contra el
+archivo `.sha256` publicado por el release oficial.
+
 ## Permisos y autenticación
 
 El workflow declara solamente:
