@@ -267,13 +267,18 @@ jobs:
         run: |
           set +e
           kubectl --context "$KUBERNETES_CONTEXT" delete \
-            -k kubernetes/overlays/development --ignore-not-found --wait=true
+            -k kubernetes/overlays/development \
+            --ignore-not-found \
+            --wait=true \
+            --timeout=2m
           helm uninstall nginx-ingress \
             --namespace nginx-ingress \
-            --kube-context "$KUBERNETES_CONTEXT" || true
+            --kube-context "$KUBERNETES_CONTEXT" \
+            --timeout 2m || true
           helm uninstall metrics-server \
             --namespace kube-system \
-            --kube-context "$KUBERNETES_CONTEXT" || true
+            --kube-context "$KUBERNETES_CONTEXT" \
+            --timeout 2m || true
           rm -f kubernetes/overlays/development/secrets.env
 
       - name: Destroy Minikube with Terraform
