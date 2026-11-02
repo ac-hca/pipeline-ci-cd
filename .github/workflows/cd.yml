@@ -226,29 +226,30 @@ jobs:
           echo "Metrics Server did not publish Pod metrics" >&2
           exit 1
 
-      - name: Start temporary access paths
+      - name: Run smoke tests and OWASP ZAP
         run: |
           set -euo pipefail
-          nohup kubectl --context "$KUBERNETES_CONTEXT" -n nginx-ingress \
+          kubectl --context "$KUBERNETES_CONTEXT" -n nginx-ingress \
             port-forward service/nginx-ingress-controller 8080:80 \
             > "$EVIDENCE_DIR/ingress-port-forward.log" 2>&1 &
-          echo "$!" > "${RUNNER_TEMP}/taskflow-ingress-port-forward.pid"
+          ingress_pid="$!"
 
-          nohup kubectl --context "$KUBERNETES_CONTEXT" -n "$TASKFLOW_NAMESPACE" \
+          kubectl --context "$KUBERNETES_CONTEXT" -n "$TASKFLOW_NAMESPACE" \
             port-forward service/taskflow-api 8000:80 \
             > "$EVIDENCE_DIR/api-port-forward.log" 2>&1 &
-          echo "$!" > "${RUNNER_TEMP}/taskflow-api-port-forward.pid"
+          api_pid="$!"
 
-      - name: Run smoke tests through Ingress
-        env:
-          TASKFLOW_BASE_URL: http://127.0.0.1:8080
-          TASKFLOW_HOST_HEADER: taskflow.local
-        run: scripts/cd/smoke-test.sh
+          stop_port_forwards() {
+            kill "$ingress_pid" "$api_pid" 2>/dev/null || true
+            wait "$ingress_pid" "$api_pid" 2>/dev/null || true
+          }
+          trap stop_port_forwards EXIT
 
-      - name: Run OWASP ZAP API scan
-        env:
-          ZAP_TARGET: http://127.0.0.1:8000/openapi.json
-        run: scripts/cd/run-zap.sh
+          TASKFLOW_BASE_URL=http://127.0.0.1:8080 \
+            TASKFLOW_HOST_HEADER=taskflow.local \
+            scripts/cd/smoke-test.sh
+          ZAP_TARGET=http://127.0.0.1:8000/openapi.json \
+            scripts/cd/run-zap.sh
 
       - name: Collect deployment evidence
         if: always()
@@ -260,14 +261,6 @@ jobs:
         if: always()
         run: |
           set +e
-          for pid_file in \
-            "${RUNNER_TEMP}/taskflow-ingress-port-forward.pid" \
-            "${RUNNER_TEMP}/taskflow-api-port-forward.pid"; do
-            if [[ -f "$pid_file" ]]; then
-              kill "$(cat "$pid_file")" 2>/dev/null || true
-            fi
-          done
-
           kubectl --context "$KUBERNETES_CONTEXT" delete \
             -k kubernetes/overlays/development --ignore-not-found --wait=true
           helm uninstall nginx-ingress \

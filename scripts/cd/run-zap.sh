@@ -4,6 +4,7 @@ set -euo pipefail
 
 zap_image="${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy:2.17.0}"
 zap_target="${ZAP_TARGET:-http://127.0.0.1:8000/openapi.json}"
+zap_network_mode="${ZAP_NETWORK_MODE:-host}"
 evidence_dir="${EVIDENCE_DIR:-./delivery-evidence}"
 rules_file="${ZAP_RULES_FILE:-security/zap/rules.tsv}"
 
@@ -24,9 +25,22 @@ docker image inspect \
   --format '{{join .RepoDigests "\n"}}' \
   "$zap_image" >"$evidence_dir/zap/image-digests.txt"
 
+case "$zap_network_mode" in
+  host)
+    docker_network_args=(--network host)
+    ;;
+  bridge)
+    docker_network_args=(--add-host host.docker.internal:host-gateway)
+    ;;
+  *)
+    echo "ZAP_NETWORK_MODE must be host or bridge" >&2
+    exit 1
+    ;;
+esac
+
 set +e
 docker run --rm \
-  --network host \
+  "${docker_network_args[@]}" \
   --volume "$evidence_dir/zap:/zap/wrk:rw" \
   "$zap_image" \
   zap-api-scan.py \
